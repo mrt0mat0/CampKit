@@ -29,7 +29,7 @@ local CAMP_TEXT = { "requires a campfire nearby", "camping features share a cool
 
 local BUTTON_SIZE = 40
 local SPACING     = 4
-local DIRECTION   = "UP"    -- which way the flyout opens: "UP", "DOWN", "LEFT", "RIGHT" or "ROUND"
+local DIRECTION   = "ROUND" -- which way the flyout opens: "UP", "DOWN", "LEFT", "RIGHT" or "ROUND"
 local HIDE_DELAY  = 0.3     -- seconds the flyout stays open after the mouse leaves
 ---------------------------------------------------------------------------
 
