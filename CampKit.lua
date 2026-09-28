@@ -69,7 +69,7 @@ local _, ns = ...
 ns = ns or {}
 
 local main, flyout
-local RebuildFlyout, RequestRebuild
+local RebuildFlyout, RequestRebuild, ShrinkCountdown
 local needsRebuild = false
 local flyButtons = {}   -- the buttons currently in use
 local flyPool = {}      -- every flyout button ever made (secure buttons can't be deleted, so they're reused)
@@ -383,7 +383,7 @@ end
 
 -- The default countdown number is large enough to hide the icon, so use a smaller one.
 local cooldownFont
-local function ShrinkCountdown(cooldown)
+function ShrinkCountdown(cooldown)
     if cooldown.shrunk then return end
     if not cooldownFont then
         cooldownFont = CreateFont("CampKitCooldownFont")
