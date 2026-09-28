@@ -373,34 +373,50 @@ local function NearFire()
 end
 
 -- The proc glow (the animated border an ability gets when it lights up), shown while
--- you're standing by a fire. Uses the game's own glow when the client has it.
+-- you're standing by a fire. Animated here rather than with the game's glow helpers,
+-- which some clients show frozen on the first frame.
 local ANTS = "Interface\\SpellActivationOverlay\\IconAlertAnts"
+local ANTS_FRAMES, ANTS_COLUMNS, ANTS_CELL = 22, 5, 48 / 256   -- 256x256 sheet of 48x48 frames
+local ANTS_FRAME_TIME = 0.01   -- same speed as the game's own proc glow
+
+-- Texture coordinates (left, right, top, bottom) of frame i (0-based) on the ants sheet.
+local function AntsFrameCoords(i)
+    local col, row = i % ANTS_COLUMNS, math.floor(i / ANTS_COLUMNS)
+    local left, top = col * ANTS_CELL, row * ANTS_CELL
+    return left, left + ANTS_CELL, top, top + ANTS_CELL
+end
+ns.AntsFrameCoords = AntsFrameCoords
 
 local function AntsOnUpdate(self, elapsed)
-    -- The ants texture is a 256x256 sheet of 22 frames, 48x48 each.
-    if AnimateTexCoords then AnimateTexCoords(self.ants, 256, 256, 48, 48, 22, elapsed, 0.01) end
+    self.elapsed = self.elapsed + elapsed
+    if self.elapsed < ANTS_FRAME_TIME then return end
+    local steps = math.floor(self.elapsed / ANTS_FRAME_TIME)
+    self.elapsed = self.elapsed - steps * ANTS_FRAME_TIME
+    self.frame = (self.frame + steps) % ANTS_FRAMES
+    self.ants:SetTexCoord(AntsFrameCoords(self.frame))
 end
 
 local function ShowProcGlow(b)
-    if ActionButton_ShowOverlayGlow then return ActionButton_ShowOverlayGlow(b) end
     if not b.procGlow then
         local f = CreateFrame("Frame", nil, b)
         f:SetPoint("CENTER")
+        f:SetFrameLevel(b:GetFrameLevel() + 5)
         f.ants = f:CreateTexture(nil, "OVERLAY")
         f.ants:SetTexture(ANTS)
         f.ants:SetBlendMode("ADD")
         f.ants:SetAllPoints()
-        f.ants:SetTexCoord(0, 48 / 256, 0, 48 / 256)
         f:SetScript("OnUpdate", AntsOnUpdate)
         b.procGlow = f
     end
+    local f = b.procGlow
     local w, h = b:GetSize()
-    b.procGlow:SetSize(w * 1.4, h * 1.4)
-    b.procGlow:Show()
+    f:SetSize(w * 1.4, h * 1.4)
+    f.elapsed, f.frame = 0, 0
+    f.ants:SetTexCoord(AntsFrameCoords(0))
+    f:Show()
 end
 
 local function HideProcGlow(b)
-    if ActionButton_HideOverlayGlow then return ActionButton_HideOverlayGlow(b) end
     if b.procGlow then b.procGlow:Hide() end
 end
 

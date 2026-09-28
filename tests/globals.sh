@@ -4,7 +4,7 @@
 # Run from the repo root: sh tests/globals.sh
 cd "$(dirname "$0")/.." || exit 1
 
-ALLOWED="_G ActionButton_HideOverlayGlow ActionButton_ShowOverlayGlow AnimateTexCoords C_AddOns C_Container C_Item C_Spell C_TooltipInfo C_TradeSkillUI C_UnitAuras
+ALLOWED="_G C_AddOns C_Container C_Item C_Spell C_TooltipInfo C_TradeSkillUI C_UnitAuras
 CampKitCharDB CampKitDB ClearCursor CooldownFrame_Set CreateFont CreateFrame GameTooltip
 GetAddOnMetadata GetContainerItemInfo GetContainerNumSlots GetCursorInfo GetItemCooldown
 GetItemCount GetItemInfo GetItemInfoInstant GetLocale GetNumTradeSkills GetSpellCooldown

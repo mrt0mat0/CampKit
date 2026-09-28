@@ -40,6 +40,17 @@ check("WoW Forever fire buff by name", F("Campfire Nearby", nil), true)
 check("other buff", F("Arcane Intellect", 1459), false)
 check("no data", F(nil, nil), false)
 
+-- AntsFrameCoords: 22 frames, 5 per row, each 48/256 wide
+local A = ns.AntsFrameCoords
+local cell = 48 / 256
+local function near(a, b) return math.abs(a - b) < 1e-9 end
+local l, r, t, b = A(0)
+check("ants frame 0", near(l, 0) and near(r, cell) and near(t, 0) and near(b, cell), true)
+l, r, t, b = A(6)
+check("ants frame 6 is row 2, col 2", near(l, cell) and near(t, cell), true)
+l, r, t, b = A(21)
+check("last ants frame stays on the sheet", r <= 1 and b <= 1, true)
+
 -- ClampSetting
 local S = ns.ClampSetting
 check("button size in range", S("buttonSize", 44), 44)
