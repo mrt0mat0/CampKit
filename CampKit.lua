@@ -32,6 +32,7 @@ local CAMP_TEXT = { "requires a campfire nearby", "camping features share a cool
 local FIRE_AURAS = {
     [7353] = true,          -- Cozy Fire
     ["cozy fire"] = true,
+    ["campfire nearby"] = true,
 }
 
 -- Defaults for settings players can change in game (Options > AddOns > CampKit, or /campkit).

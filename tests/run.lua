@@ -36,6 +36,7 @@ check("round is never flipped", C("ROUND", {}, 200), "ROUND")
 local F = ns.IsFireAura
 check("fire by spell ID", F("Whatever", 7353), true)
 check("fire by name, any case", F("Cozy Fire", nil), true)
+check("WoW Forever fire buff by name", F("Campfire Nearby", nil), true)
 check("other buff", F("Arcane Intellect", 1459), false)
 check("no data", F(nil, nil), false)
 
