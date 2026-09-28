@@ -5,6 +5,7 @@
 ## Version: 1.2
 ## SavedVariables: CampKitDB
 ## SavedVariablesPerCharacter: CampKitCharDB
+## X-Curse-Project-ID: 1716342
 
 Locales.lua
 Locales/deDE.lua
