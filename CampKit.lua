@@ -996,6 +996,22 @@ ns.CurrentItems = CurrentItems
 ns.ItemName = ItemName
 ns.ItemIcon = function(id) return select(5, GetInfoInstant(id)) or QUESTION_MARK end
 ns.IsFound = function(id) return CampKitCharDB.learned[id] and true or false end
+-- Items in your bags that could go on the flyout: usable ones (food, potions, kits, toys),
+-- not already on it, sorted by name. Gear and junk have no use effect, so they're left out.
+local GetItemSpellFn = (C_Item and C_Item.GetItemSpell) or GetItemSpell
+ns.BagItemsToAdd = function()
+    local onFlyout = {}
+    for _, id in ipairs(CurrentItems()) do onFlyout[id] = true end
+    local list, seen = {}, {}
+    ForEachBagItem(function(id, name)
+        if seen[id] or onFlyout[id] or id == MAIN_ID then return end
+        seen[id] = true
+        if GetItemSpellFn and not GetItemSpellFn(id) then return end
+        list[#list + 1] = { id = id, name = name or ItemName(id) }
+    end)
+    table.sort(list, function(a, b) return a.name < b.name end)
+    return list
+end
 ns.HiddenCount = function()
     local n = 0
     for _ in pairs(CampKitCharDB.hidden) do n = n + 1 end

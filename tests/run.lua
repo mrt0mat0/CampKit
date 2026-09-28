@@ -8,6 +8,21 @@ CreateFrame = stub
 SlashCmdList = {}
 StaticPopupDialogs = {}
 
+-- A fake bag: slot -> { itemID, name }. Items listed in USABLE have a use effect.
+local BAG = {}
+local USABLE = {}
+C_Container = {
+    GetContainerNumSlots = function(bag) return bag == 0 and #BAG or 0 end,
+    GetContainerItemInfo = function(bag, slot)
+        local item = bag == 0 and BAG[slot]
+        if item then return { itemID = item[1], hyperlink = "[" .. item[2] .. "]", stackCount = 1 } end
+    end,
+}
+C_Item = {
+    GetItemSpell = function(id) return USABLE[id] and "Use" or nil end,
+    GetItemNameByID = function(id) return "item" .. id end,
+}
+
 -- Load both files the way the game does: in .toc order, sharing one namespace.
 local ns = {}
 assert(loadfile("CampKit.lua"))("CampKit", ns)
@@ -59,6 +74,17 @@ check("button size above max", S("buttonSize", 200), 64)
 check("button size snaps to step", S("buttonSize", 42), 44)
 check("font size in range", S("cooldownFontSize", 11), 11)
 check("font size below min", S("cooldownFontSize", 7), 8)
+
+-- BagItemsToAdd: usable, not already on the flyout, not the campfire, no duplicates, sorted
+CampKitCharDB = { learned = { [279978] = true }, hidden = {}, extra = {} }
+BAG = { { 2, "Zesty Stew" }, { 279978, "Camp Tent" }, { 3, "Rusty Sword" },
+    { 279981, "Basic Campfire Kit" }, { 4, "Apple" }, { 2, "Zesty Stew" } }
+USABLE = { [2] = true, [279978] = true, [279981] = true, [4] = true }
+local picks = ns.BagItemsToAdd()
+check("picker offers 2 items", #picks, 2)
+check("picker sorts by name", picks[1] and picks[1].name, "Apple")
+check("picker second item", picks[2] and picks[2].name, "Zesty Stew")
+CampKitCharDB = nil
 
 -- Wiring between the files
 check("fire glow is on by default", ns.Get.fireGlow(), true)

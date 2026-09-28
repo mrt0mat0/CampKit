@@ -6,6 +6,7 @@ ns = ns or {}
 
 local ROW_HEIGHT = 28
 local MAX_ROWS = 10
+local PICK_SIZE, PICK_GAP, PICK_COLUMNS, PICK_ROWS = 32, 6, 7, 6
 local LEFT, RIGHT = 16, 340
 local DIRECTIONS = { "UP", "DOWN", "LEFT", "RIGHT", "ROUND" }
 local DIRECTION_LABELS = { UP = "Up", DOWN = "Down", LEFT = "Left", RIGHT = "Right", ROUND = "Round" }
@@ -155,28 +156,51 @@ local function Build()
     footer:SetPoint("TOPLEFT", widgets.list, "BOTTOMLEFT", 0, -8)
     widgets.more = Text(footer, "GameFontDisableSmall", "", 0, 0)
 
-    -- Drop an item here (or click here while holding one) to add it.
-    local slot = CreateFrame("Button", nil, footer)
-    slot:SetSize(32, 32)
-    slot:SetPoint("TOPLEFT", 0, -18)
-    slot:SetNormalTexture("Interface\\PaperDoll\\UI-Backpack-EmptySlot")
-    slot:SetHighlightTexture("Interface\\Buttons\\ButtonHilight-Square", "ADD")
-    local function TakeCursorItem()
-        local kind, id = GetCursorInfo()
-        if kind ~= "item" then return end
-        ClearCursor()
-        Do(ns.actions.AddItem(id))
-    end
-    slot:SetScript("OnReceiveDrag", TakeCursorItem)
-    slot:SetScript("OnClick", TakeCursorItem)
-    local hint = footer:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-    hint:SetPoint("LEFT", slot, "RIGHT", 8, 0)
-    hint:SetWidth(230)
-    hint:SetJustifyH("LEFT")
-    hint:SetText("Drag an item from your bags here to add it to the flyout.")
+    Button(footer, "Add Item...", 110, 0, -18, function()
+        widgets.picking = true
+        Refresh()
+    end)
+    Button(footer, "Rescan Bags", 110, 0, -46, function() Do(ns.actions.Rescan()) end)
+    Button(footer, "Restore Defaults", 130, 116, -46, function() StaticPopup_Show("CAMPKIT_RESTORE_DEFAULTS") end)
+    widgets.footer = footer
 
-    Button(footer, "Rescan Bags", 110, 0, -62, function() Do(ns.actions.Rescan()) end)
-    Button(footer, "Restore Defaults", 130, 116, -62, function() StaticPopup_Show("CAMPKIT_RESTORE_DEFAULTS") end)
+    -- Add Item picker: replaces the list with the usable items in your bags. Bags can't be
+    -- opened while the settings window is up, so this is how items get added from here.
+    local picker = CreateFrame("Frame", nil, p)
+    picker:SetPoint("TOPLEFT", RIGHT, -94)
+    picker:SetSize(280, 300)
+    picker:Hide()
+    widgets.picker = picker
+    Text(picker, "GameFontHighlightSmall", "Click an item from your bags to add it to the flyout.", 0, 0)
+    widgets.pickEmpty = Text(picker, "GameFontDisable", "No usable items in your bags to add.", 0, -24)
+    widgets.pickMore = Text(picker, "GameFontDisableSmall", "", 0,
+        -20 - PICK_ROWS * (PICK_SIZE + PICK_GAP) - 4)
+    widgets.picks = {}
+    for i = 1, PICK_COLUMNS * PICK_ROWS do
+        local b = CreateFrame("Button", nil, picker)
+        b:SetSize(PICK_SIZE, PICK_SIZE)
+        local col, row = (i - 1) % PICK_COLUMNS, math.floor((i - 1) / PICK_COLUMNS)
+        b:SetPoint("TOPLEFT", col * (PICK_SIZE + PICK_GAP), -20 - row * (PICK_SIZE + PICK_GAP))
+        b.icon = b:CreateTexture(nil, "ARTWORK")
+        b.icon:SetAllPoints()
+        b:SetHighlightTexture("Interface\\Buttons\\ButtonHilight-Square", "ADD")
+        b:SetScript("OnEnter", function(self)
+            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+            GameTooltip:SetItemByID(self.itemID)
+            GameTooltip:Show()
+        end)
+        b:SetScript("OnLeave", function() GameTooltip:Hide() end)
+        b:SetScript("OnClick", function(self)
+            GameTooltip:Hide()
+            widgets.picking = false
+            Do(ns.actions.AddItem(self.itemID))
+        end)
+        widgets.picks[i] = b
+    end
+    Button(picker, CANCEL or "Cancel", 90, 0, -20 - PICK_ROWS * (PICK_SIZE + PICK_GAP) - 22, function()
+        widgets.picking = false
+        Refresh()
+    end)
 
     built = true
 end
@@ -197,6 +221,28 @@ function Refresh()
     widgets.fireGlow:SetChecked(ns.Get.fireGlow())
     widgets.buttonSize:SetText(ns.Get.buttonSize())
     widgets.cooldownFontSize:SetText(ns.Get.cooldownFontSize())
+
+    -- Right column: either the picker or the flyout list.
+    widgets.picker:SetShown(widgets.picking)
+    widgets.list:SetShown(not widgets.picking)
+    widgets.footer:SetShown(not widgets.picking)
+    if widgets.picking then
+        local candidates = ns.BagItemsToAdd()
+        for i, b in ipairs(widgets.picks) do
+            local c = candidates[i]
+            if c then
+                b.itemID = c.id
+                b.icon:SetTexture(ns.ItemIcon(c.id))
+                b:Show()
+            else
+                b:Hide()
+            end
+        end
+        widgets.pickEmpty:SetShown(#candidates == 0)
+        local extra = #candidates - #widgets.picks
+        widgets.pickMore:SetText(extra > 0 and ("%d more: use /campkit add"):format(extra) or "")
+        return
+    end
 
     local items = ns.CurrentItems()
     local shown = math.min(#items, MAX_ROWS)
@@ -223,6 +269,7 @@ end
 
 panel:SetScript("OnShow", function()
     if not built then Build() end
+    widgets.picking = false
     Refresh()
 end)
 

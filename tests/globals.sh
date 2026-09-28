@@ -4,10 +4,10 @@
 # Run from the repo root: sh tests/globals.sh
 cd "$(dirname "$0")/.." || exit 1
 
-ALLOWED="_G C_AddOns C_Container C_Item C_Spell C_TooltipInfo C_TradeSkillUI C_UnitAuras
-CampKitCharDB CampKitDB ClearCursor CooldownFrame_Set CreateFont CreateFrame GameTooltip
-GetAddOnMetadata GetContainerItemInfo GetContainerNumSlots GetCursorInfo GetItemCooldown
-GetItemCount GetItemInfo GetItemInfoInstant GetLocale GetNumTradeSkills GetSpellCooldown
+ALLOWED="_G CANCEL C_AddOns C_Container C_Item C_Spell C_TooltipInfo C_TradeSkillUI C_UnitAuras
+CampKitCharDB CampKitDB CooldownFrame_Set CreateFont CreateFrame GameTooltip
+GetAddOnMetadata GetContainerItemInfo GetContainerNumSlots GetItemCooldown
+GetItemCount GetItemInfo GetItemInfoInstant GetItemSpell GetLocale GetNumTradeSkills GetSpellCooldown
 GetSpellTexture GetTradeSkillInfo GetTradeSkillItemLink InCombatLockdown
 InterfaceOptions_AddCategory InterfaceOptionsFrame_OpenToCategory MouseIsOver NO
 NUM_BAG_SLOTS NUM_TOTAL_EQUIPPED_BAG_SLOTS RegisterStateDriver SLASH_CAMPKIT1 Settings
