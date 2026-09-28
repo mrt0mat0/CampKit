@@ -61,9 +61,13 @@ check("font size in range", S("cooldownFontSize", 11), 11)
 check("font size below min", S("cooldownFontSize", 7), 8)
 
 -- Wiring between the files
+check("fire glow is on by default", ns.Get.fireGlow(), true)
+CampKitDB = { fireGlow = false }
+check("fire glow can be turned off", ns.Get.fireGlow(), false)
+CampKitDB = nil
 check("settings page hooked up", type(ns.OnChanged), "function")
 check("restore defaults dialog", type(StaticPopupDialogs.CAMPKIT_RESTORE_DEFAULTS), "table")
-for _, name in ipairs({ "SetDirection", "SetHideInCombat", "SetLocked", "SetButtonSize",
+for _, name in ipairs({ "SetDirection", "SetHideInCombat", "SetLocked", "SetFireGlow", "SetButtonSize",
         "SetCooldownFontSize", "AddItem", "RemoveItem", "Rescan", "RestoreDefaults", "ResetPosition" }) do
     check("action " .. name, type(ns.actions[name]), "function")
 end

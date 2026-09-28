@@ -97,6 +97,7 @@ local function ButtonSize() return Setting("buttonSize", BUTTON_SIZE) end
 local function CooldownFontSize() return Setting("cooldownFontSize", COOLDOWN_FONT_SIZE) end
 local function HideInCombat() return Setting("hideInCombat", true) end
 local function Locked() return Setting("locked", false) end
+local function FireGlow() return Setting("fireGlow", true) end
 
 local main, flyout
 local RebuildFlyout, RequestRebuild, ShrinkCountdown
@@ -422,7 +423,7 @@ end
 
 local function UpdateFireGlow()
     if not main then return end
-    local near = NearFire()
+    local near = FireGlow() and NearFire()
     if near == main.nearFire then return end   -- don't restart the animation on every update
     main.nearFire = near
     if near then ShowProcGlow(main) else HideProcGlow(main) end
@@ -912,6 +913,14 @@ function actions.SetLocked(on)
     return Changed(true, on and "button locked in place." or "button unlocked; right-drag to move it.")
 end
 
+function actions.SetFireGlow(on)
+    local ok, why = CanChange()
+    if not ok then return false, why end
+    CampKitDB.fireGlow = on
+    UpdateFireGlow()
+    return Changed(true, on and "the campfire glows when you're near a fire." or "fire glow off.")
+end
+
 function actions.SetButtonSize(size)
     local ok, why = CanChange()
     if not ok then return false, why end
@@ -993,7 +1002,7 @@ ns.HiddenCount = function()
     return n
 end
 ns.Get = {
-    direction = Direction, hideInCombat = HideInCombat, locked = Locked,
+    direction = Direction, hideInCombat = HideInCombat, locked = Locked, fireGlow = FireGlow,
     buttonSize = ButtonSize, cooldownFontSize = CooldownFontSize,
 }
 
@@ -1078,6 +1087,8 @@ SlashCmdList.CAMPKIT = function(msg)
         Report(actions.SetHideInCombat(not HideInCombat()))
     elseif msg == "lock" then
         Report(actions.SetLocked(not Locked()))
+    elseif msg == "glow" then
+        Report(actions.SetFireGlow(not FireGlow()))
     elseif msg == "buffs" then
         Say("your buffs (name = ID):")
         ForEachBuff(function(name, spellID)
@@ -1097,6 +1108,7 @@ SlashCmdList.CAMPKIT = function(msg)
         print("  /campkit size <number>  -  button size")
         print("  /campkit combat  -  toggle hiding the button in combat")
         print("  /campkit lock  -  toggle locking the button in place")
+        print("  /campkit glow  -  toggle the glow when you're near a fire")
         print("  /campkit reset  -  recenter the button")
         print("  /campkit bags  -  list your bag items with IDs")
         print("  /campkit buffs  -  list your buffs with IDs (to find the fire aura)")

@@ -131,10 +131,12 @@ local function Build()
         function(on) Do(ns.actions.SetHideInCombat(on)) end)
     widgets.locked = Checkbox(p, "Lock Position", LEFT - 4, -180,
         function(on) Do(ns.actions.SetLocked(on)) end)
-    widgets.buttonSize = Stepper(p, "Button Size", "buttonSize", LEFT, -216, ns.actions.SetButtonSize)
-    widgets.cooldownFontSize = Stepper(p, "Cooldown Number Size", "cooldownFontSize", LEFT, -244,
+    widgets.fireGlow = Checkbox(p, "Glow Near a Fire", LEFT - 4, -208,
+        function(on) Do(ns.actions.SetFireGlow(on)) end)
+    widgets.buttonSize = Stepper(p, "Button Size", "buttonSize", LEFT, -244, ns.actions.SetButtonSize)
+    widgets.cooldownFontSize = Stepper(p, "Cooldown Number Size", "cooldownFontSize", LEFT, -272,
         ns.actions.SetCooldownFontSize)
-    Button(p, "Reset Position", 120, LEFT, -284, function() Do(ns.actions.ResetPosition()) end)
+    Button(p, "Reset Position", 120, LEFT, -312, function() Do(ns.actions.ResetPosition()) end)
 
     -- Right column: what's on the flyout.
     Text(p, "GameFontNormal", "Flyout Items", RIGHT, -72)
@@ -192,6 +194,7 @@ function Refresh()
     end
     widgets.hideInCombat:SetChecked(ns.Get.hideInCombat())
     widgets.locked:SetChecked(ns.Get.locked())
+    widgets.fireGlow:SetChecked(ns.Get.fireGlow())
     widgets.buttonSize:SetText(ns.Get.buttonSize())
     widgets.cooldownFontSize:SetText(ns.Get.cooldownFontSize())
 
