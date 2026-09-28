@@ -377,7 +377,7 @@ end
 -- which some clients show frozen on the first frame.
 local ANTS = "Interface\\SpellActivationOverlay\\IconAlertAnts"
 local ANTS_FRAMES, ANTS_COLUMNS, ANTS_CELL = 22, 5, 48 / 256   -- 256x256 sheet of 48x48 frames
-local ANTS_FRAME_TIME = 0.01   -- same speed as the game's own proc glow
+local ANTS_FRAME_TIME = 0.02   -- half the speed of the game's own proc glow
 
 -- Texture coordinates (left, right, top, bottom) of frame i (0-based) on the ants sheet.
 local function AntsFrameCoords(i)
