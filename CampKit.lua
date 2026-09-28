@@ -372,9 +372,44 @@ local function NearFire()
     return found
 end
 
--- A steady warm ring on the campfire while you're standing by a fire.
+-- The proc glow (the animated border an ability gets when it lights up), shown while
+-- you're standing by a fire. Uses the game's own glow when the client has it.
+local ANTS = "Interface\\SpellActivationOverlay\\IconAlertAnts"
+
+local function AntsOnUpdate(self, elapsed)
+    -- The ants texture is a 256x256 sheet of 22 frames, 48x48 each.
+    if AnimateTexCoords then AnimateTexCoords(self.ants, 256, 256, 48, 48, 22, elapsed, 0.01) end
+end
+
+local function ShowProcGlow(b)
+    if ActionButton_ShowOverlayGlow then return ActionButton_ShowOverlayGlow(b) end
+    if not b.procGlow then
+        local f = CreateFrame("Frame", nil, b)
+        f:SetPoint("CENTER")
+        f.ants = f:CreateTexture(nil, "OVERLAY")
+        f.ants:SetTexture(ANTS)
+        f.ants:SetBlendMode("ADD")
+        f.ants:SetAllPoints()
+        f.ants:SetTexCoord(0, 48 / 256, 0, 48 / 256)
+        f:SetScript("OnUpdate", AntsOnUpdate)
+        b.procGlow = f
+    end
+    local w, h = b:GetSize()
+    b.procGlow:SetSize(w * 1.4, h * 1.4)
+    b.procGlow:Show()
+end
+
+local function HideProcGlow(b)
+    if ActionButton_HideOverlayGlow then return ActionButton_HideOverlayGlow(b) end
+    if b.procGlow then b.procGlow:Hide() end
+end
+
 local function UpdateFireGlow()
-    if main and main.fireGlow then main.fireGlow:SetShown(NearFire()) end
+    if not main then return end
+    local near = NearFire()
+    if near == main.nearFire then return end   -- don't restart the animation on every update
+    main.nearFire = near
+    if near then ShowProcGlow(main) else HideProcGlow(main) end
 end
 
 local function UpdateAll()
@@ -647,6 +682,10 @@ local function ApplySize()
     main:SetSize(size, size)
     main.glow:SetSize(size * 1.9, size * 1.9)
     for _, b in ipairs(flyPool) do b:SetSize(size, size) end
+    if main.nearFire then
+        HideProcGlow(main)
+        ShowProcGlow(main)
+    end
     LayoutFlyout()
 end
 
@@ -709,14 +748,6 @@ local function Initialize()
     fade:SetDuration(1.6)
     fade:SetSmoothing("IN_OUT")
     main.pulse = pulse
-
-    main.fireGlow = main:CreateTexture(nil, "OVERLAY", nil, 1)
-    main.fireGlow:SetTexture(CIRCLE)
-    main.fireGlow:SetBlendMode("ADD")
-    main.fireGlow:SetVertexColor(1, 0.55, 0.15, 0.45)
-    main.fireGlow:SetPoint("TOPLEFT", -2, 2)
-    main.fireGlow:SetPoint("BOTTOMRIGHT", 2, -2)
-    main.fireGlow:Hide()
 
     flyout = CreateFrame("Frame", "CampKitFlyout", main)
     flyout:Hide()
