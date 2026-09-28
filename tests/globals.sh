@@ -13,7 +13,7 @@ InterfaceOptions_AddCategory InterfaceOptionsFrame_OpenToCategory MouseIsOver NO
 NUM_BAG_SLOTS NUM_TOTAL_EQUIPPED_BAG_SLOTS RegisterStateDriver SLASH_CAMPKIT1 Settings
 SlashCmdList STANDARD_TEXT_FONT StaticPopupDialogs StaticPopup_Show UIParent UnitBuff
 UnregisterStateDriver WorldFrame YES
-ipairs math pairs pcall print select table tonumber tostring type unpack wipe"
+ipairs math pairs pcall print select setmetatable table tonumber tostring type unpack wipe"
 
 status=0
 for f in $(grep -v '^#' CampKit.toc | grep '\.lua$'); do

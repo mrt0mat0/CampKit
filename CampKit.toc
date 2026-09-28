@@ -6,5 +6,15 @@
 ## SavedVariables: CampKitDB
 ## SavedVariablesPerCharacter: CampKitCharDB
 
+Locales.lua
+Locales/deDE.lua
+Locales/frFR.lua
+Locales/esES.lua
+Locales/ptBR.lua
+Locales/itIT.lua
+Locales/ruRU.lua
+Locales/koKR.lua
+Locales/zhCN.lua
+Locales/zhTW.lua
 CampKit.lua
 Options.lua

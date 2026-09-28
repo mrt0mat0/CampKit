@@ -25,6 +25,7 @@ C_Item = {
 
 -- Load both files the way the game does: in .toc order, sharing one namespace.
 local ns = {}
+assert(loadfile("Locales.lua"))("CampKit", ns)
 assert(loadfile("CampKit.lua"))("CampKit", ns)
 assert(loadfile("Options.lua"))("CampKit", ns)
 
@@ -65,6 +66,17 @@ l, r, t, b = A(6)
 check("ants frame 6 is row 2, col 2", near(l, cell) and near(t, cell), true)
 l, r, t, b = A(21)
 check("last ants frame stays on the sheet", r <= 1 and b <= 1, true)
+
+-- SharesCooldown: same start and duration, longer than a global cooldown
+local SC = ns.SharesCooldown
+check("same camp cooldown", SC(100, 300, 100, 300), true)
+check("different start", SC(101, 300, 100, 300), false)
+check("global cooldown doesn't count", SC(100, 1.5, 100, 1.5), false)
+check("not on cooldown", SC(0, 0, 100, 300), false)
+check("no cooldown data", SC(nil, nil, 100, 300), false)
+
+-- Translations fall back to English
+check("missing translation shows English", ns.L["Remove"], "Remove")
 
 -- ClampSetting
 local S = ns.ClampSetting

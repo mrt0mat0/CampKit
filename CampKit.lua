@@ -70,6 +70,7 @@ end
 
 local _, ns = ...
 ns = ns or {}
+local L = ns.L or setmetatable({}, { __index = function(_, key) return key end })
 local unpack = unpack or table.unpack
 
 -- Allowed ranges for the size settings: { min, max, step }.
@@ -250,6 +251,42 @@ local function LearnFromBags()
     local found = false
     ForEachBagItem(function(id)
         if Learn(id) then found = true end
+    end)
+    if found then RequestRebuild() end
+end
+
+-- Camping features share one cooldown, so an item cooling down in step with the campfire
+-- (or with a camp item we already know) is a camp item too. Unlike the tooltip check this
+-- works on every language client. Longer than a global cooldown, so the GCD can't match.
+local MIN_SHARED_COOLDOWN = 2
+
+local function SharesCooldown(start, duration, refStart, refDuration)
+    return start ~= nil and duration ~= nil and refStart ~= nil and refDuration ~= nil
+        and duration > MIN_SHARED_COOLDOWN and start == refStart and duration == refDuration
+end
+ns.SharesCooldown = SharesCooldown
+
+local function CampCooldown()
+    local candidates = { MAIN_ID }
+    for id in pairs(CampKitCharDB.learned) do candidates[#candidates + 1] = id end
+    for _, id in ipairs(candidates) do
+        local start, duration = GetItemCD(id)
+        if start and duration and duration > MIN_SHARED_COOLDOWN then return start, duration end
+    end
+end
+
+local function LearnFromCooldowns()
+    local refStart, refDuration = CampCooldown()
+    if not refStart then return end
+    local found = false
+    ForEachBagItem(function(id)
+        if id ~= MAIN_ID and not CampKitCharDB.learned[id] then
+            local start, duration = GetItemCD(id)
+            if SharesCooldown(start, duration, refStart, refDuration) then
+                CampKitCharDB.learned[id] = true
+                found = true
+            end
+        end
     end)
     if found then RequestRebuild() end
 end
@@ -448,7 +485,7 @@ local function ShowTooltip(b)
         GameTooltip:SetText(tostring(b.value))
     end
     if b == main then
-        local hint = Locked() and "Left-click: use" or "Left-click: use    Right-drag: move"
+        local hint = Locked() and L["Left-click: use"] or L["Left-click: use    Right-drag: move"]
         GameTooltip:AddLine(hint, 0.6, 0.8, 1, true)
     end
     GameTooltip:Show()
@@ -778,13 +815,13 @@ local function Initialize()
 
     if not CampKitCharDB.hinted then
         CampKitCharDB.hinted = true
-        print("|cff33ff99CampKit|r: open each of your profession windows once so CampKit can find your camp recipes.")
+        print("|cff33ff99CampKit|r: " .. L["open each of your profession windows once so CampKit can find your camp recipes."])
     end
-    -- Detection reads English tooltip text, so other clients only find the items listed by ID.
+    -- Tooltip detection reads English text; other clients find items by the shared cooldown.
     local locale = GetLocale and GetLocale()
     if locale and locale ~= "enUS" and locale ~= "enGB" and not CampKitCharDB.localeHinted then
         CampKitCharDB.localeHinted = true
-        print("|cff33ff99CampKit|r: on non-English clients some camp items aren't found automatically. Add them with /campkit add and shift-click the item.")
+        print("|cff33ff99CampKit|r: " .. L["CampKit finds your camp items the first time your campfire is on cooldown. Anything it misses can be added from the settings page."])
     end
 end
 
@@ -832,6 +869,9 @@ events:SetScript("OnEvent", function(_, event, arg1)
     elseif event == "PLAYER_REGEN_DISABLED" then
         -- Last moment before combat lockdown: close the flyout so it isn't stuck open.
         if flyout and flyout:IsShown() then flyout:Hide() end
+    elseif event == "BAG_UPDATE_COOLDOWN" then
+        LearnFromCooldowns()
+        UpdateAll()
     else
         UpdateAll()
     end
@@ -857,7 +897,7 @@ end
 local function ItemName(id)
     local name = (C_Item and C_Item.GetItemNameByID and C_Item.GetItemNameByID(id))
         or (GetItemInfo and GetItemInfo(id))
-    return name or ("item " .. id)
+    return name or L["item %d"]:format(id)
 end
 
 local function IndexOf(list, id)
@@ -878,8 +918,8 @@ local actions = {}
 ns.actions = actions
 
 local function CanChange()
-    if not initialized then return false, "not ready yet (it finishes loading after combat)." end
-    if InCombatLockdown() then return false, "can't change that in combat." end
+    if not initialized then return false, L["not ready yet (it finishes loading after combat)."] end
+    if InCombatLockdown() then return false, L["can't change that in combat."] end
     return true
 end
 
@@ -894,8 +934,8 @@ function actions.SetDirection(dir)
     CampKitDB.direction = dir
     if flyout:IsShown() then flyout:Hide() end
     LayoutFlyout()
-    if dir == "ROUND" then return Changed(true, "your camp items now circle the campfire.") end
-    return Changed(true, "flyout now opens " .. dir:lower() .. ".")
+    if dir == "ROUND" then return Changed(true, L["your camp items now circle the campfire."]) end
+    return Changed(true, L["flyout now opens %s."]:format(L[dir:lower()]))
 end
 
 function actions.SetHideInCombat(on)
@@ -903,14 +943,14 @@ function actions.SetHideInCombat(on)
     if not ok then return false, why end
     CampKitDB.hideInCombat = on
     ApplyCombatVisibility()
-    return Changed(true, on and "hiding in combat." or "staying visible in combat.")
+    return Changed(true, on and L["hiding in combat."] or L["staying visible in combat."])
 end
 
 function actions.SetLocked(on)
     local ok, why = CanChange()
     if not ok then return false, why end
     CampKitDB.locked = on
-    return Changed(true, on and "button locked in place." or "button unlocked; right-drag to move it.")
+    return Changed(true, on and L["button locked in place."] or L["button unlocked; right-drag to move it."])
 end
 
 function actions.SetFireGlow(on)
@@ -918,7 +958,7 @@ function actions.SetFireGlow(on)
     if not ok then return false, why end
     CampKitDB.fireGlow = on
     UpdateFireGlow()
-    return Changed(true, on and "the campfire glows when you're near a fire." or "fire glow off.")
+    return Changed(true, on and L["the campfire glows when you're near a fire."] or L["fire glow off."])
 end
 
 function actions.SetButtonSize(size)
@@ -926,7 +966,7 @@ function actions.SetButtonSize(size)
     if not ok then return false, why end
     CampKitDB.buttonSize = ClampSetting("buttonSize", size)
     ApplySize()
-    return Changed(true, "button size " .. CampKitDB.buttonSize .. ".")
+    return Changed(true, L["button size %d."]:format(CampKitDB.buttonSize))
 end
 
 function actions.SetCooldownFontSize(size)
@@ -934,7 +974,7 @@ function actions.SetCooldownFontSize(size)
     if not ok then return false, why end
     CampKitDB.cooldownFontSize = ClampSetting("cooldownFontSize", size)
     ApplyCooldownFont()
-    return Changed(true, "cooldown number size " .. CampKitDB.cooldownFontSize .. ".")
+    return Changed(true, L["cooldown number size %d."]:format(CampKitDB.cooldownFontSize))
 end
 
 function actions.AddItem(id)
@@ -943,25 +983,25 @@ function actions.AddItem(id)
     if CampKitCharDB.hidden[id] then
         CampKitCharDB.hidden[id] = nil
     elseif IndexOf(CurrentItems(), id) then
-        return false, ItemName(id) .. " is already on the flyout."
+        return false, L["%s is already on the flyout."]:format(ItemName(id))
     else
         table.insert(CampKitCharDB.extra, id)
     end
     RebuildFlyout()
-    return Changed(true, "added " .. ItemName(id) .. ".")
+    return Changed(true, L["added %s."]:format(ItemName(id)))
 end
 
 function actions.RemoveItem(id)
     local ok, why = CanChange()
     if not ok then return false, why end
     if not IndexOf(CurrentItems(), id) then
-        return false, "that item isn't on the flyout. /campkit list shows what is."
+        return false, L["that item isn't on the flyout. /campkit list shows what is."]
     end
     local extraIndex = IndexOf(CampKitCharDB.extra, id)
     if extraIndex then table.remove(CampKitCharDB.extra, extraIndex) end
     if CampKitCharDB.learned[id] then CampKitCharDB.hidden[id] = true end
     RebuildFlyout()
-    return Changed(true, "removed " .. ItemName(id) .. ".")
+    return Changed(true, L["removed %s."]:format(ItemName(id)))
 end
 
 function actions.Rescan()
@@ -970,7 +1010,7 @@ function actions.Rescan()
     wipe(checked)
     LearnFromBags()
     RebuildFlyout()
-    return Changed(true, "bags scanned. Open a profession window to pick up its camp recipes.")
+    return Changed(true, L["bags scanned. Open a profession window to pick up its camp recipes."])
 end
 
 function actions.RestoreDefaults()
@@ -979,7 +1019,7 @@ function actions.RestoreDefaults()
     wipe(CampKitCharDB.hidden)
     wipe(CampKitCharDB.extra)
     RebuildFlyout()
-    return Changed(true, "showing every camp item found, and removed your own additions.")
+    return Changed(true, L["showing every camp item found, and removed your own additions."])
 end
 
 function actions.ResetPosition()
@@ -987,7 +1027,7 @@ function actions.ResetPosition()
     if not ok then return false, why end
     CampKitDB.point, CampKitDB.relPoint, CampKitDB.x, CampKitDB.y = nil, nil, nil, nil
     RestorePosition()
-    return Changed(true, "position reset.")
+    return Changed(true, L["position reset."])
 end
 
 -- Read-only views for the settings page.
@@ -1036,26 +1076,26 @@ SlashCmdList.CAMPKIT = function(msg)
     local rawArg = raw:match("^%S*%s*(.-)$")
     local cmd, arg = msg:match("^(%S*)%s*(.-)$")
     if not initialized then
-        Say("not ready yet (it finishes loading after combat).")
+        Say(L["not ready yet (it finishes loading after combat)."])
     elseif msg == "" or msg == "options" or msg == "settings" then
         if InCombatLockdown() then
-            Say("settings open after combat.")
+            Say(L["settings open after combat."])
         elseif ns.OpenOptions then
             ns.OpenOptions()
         else
-            Say("this client has no addon settings page. /campkit help lists the commands.")
+            Say(L["this client has no addon settings page. /campkit help lists the commands."])
         end
     elseif cmd == "grow" then
         local dir = VALID_DIRECTIONS[arg]
         if not dir then
-            Say("use /campkit grow up, down, left, right or round.")
+            Say(L["use /campkit grow up, down, left, right or round."])
             return
         end
         Report(actions.SetDirection(dir))
     elseif cmd == "add" then
         local id = rawArg ~= "" and ParseItem(rawArg)
         if not id then
-            Say("type /campkit add, then shift-click the item from your bags (or give its ID).")
+            Say(L["type /campkit add, then shift-click the item from your bags (or give its ID)."])
             return
         end
         Report(actions.AddItem(id))
@@ -1064,7 +1104,7 @@ SlashCmdList.CAMPKIT = function(msg)
         local n = tonumber(rawArg)
         local id = (n and n >= 1 and n <= #items) and items[n] or (rawArg ~= "" and ParseItem(rawArg))
         if not id then
-            Say("that item isn't on the flyout. /campkit list shows what is.")
+            Say(L["that item isn't on the flyout. /campkit list shows what is."])
             return
         end
         Report(actions.RemoveItem(id))
@@ -1072,31 +1112,31 @@ SlashCmdList.CAMPKIT = function(msg)
         local n = tonumber(arg)
         if not n then
             local lo, hi = unpack(LIMITS.buttonSize)
-            Say(("use /campkit size <%d-%d>. It's %d now."):format(lo, hi, ButtonSize()))
+            Say(L["use /campkit size <%d-%d>. It's %d now."]:format(lo, hi, ButtonSize()))
             return
         end
         Report(actions.SetButtonSize(n))
     elseif msg == "list" then
-        Say("flyout items, in order:")
+        Say(L["flyout items, in order:"])
         for i, id in ipairs(CurrentItems()) do
-            local source = CampKitCharDB.learned[id] and "found" or "added"
+            local source = CampKitCharDB.learned[id] and L["found"] or L["added"]
             print(("  %d. %s (%d, %s)"):format(i, ItemName(id), id, source))
         end
         local hiddenCount = ns.HiddenCount()
         if hiddenCount > 0 then
-            print(("  %d hidden. /campkit defaults brings them back."):format(hiddenCount))
+            print("  " .. L["%d hidden. /campkit defaults brings them back."]:format(hiddenCount))
         end
     elseif msg == "scan" then
         Report(actions.Rescan())
     elseif msg == "defaults" then
         Report(actions.RestoreDefaults())
     elseif msg == "bags" then
-        Say("items in your bags (name = ID):")
+        Say(L["items in your bags (name = ID):"])
         local seen = {}
         ForEachBagItem(function(id, name, _, _, bag)
             if not seen[id] then
                 seen[id] = true
-                print(("  %s = %d  (bag %d)"):format(name or "?", id, bag))
+                print("  " .. L["%s = %d  (bag %d)"]:format(name or "?", id, bag))
             end
         end)
     elseif msg == "combat" then
@@ -1106,27 +1146,31 @@ SlashCmdList.CAMPKIT = function(msg)
     elseif msg == "glow" then
         Report(actions.SetFireGlow(not FireGlow()))
     elseif msg == "buffs" then
-        Say("your buffs (name = ID):")
+        Say(L["your buffs (name = ID):"])
         ForEachBuff(function(name, spellID)
-            print(("  %s = %s%s"):format(name, tostring(spellID), IsFireAura(name, spellID) and "  (fire)" or ""))
+            print(("  %s = %s%s"):format(name, tostring(spellID), IsFireAura(name, spellID) and ("  " .. L["(fire)"]) or ""))
         end)
     elseif msg == "reset" then
         Report(actions.ResetPosition())
     else
-        print("|cff33ff99CampKit|r commands:")
-        print("  /campkit  -  open the settings page")
-        print("  /campkit add <shift-click item>  -  add any item to the flyout")
-        print("  /campkit remove <item or number>  -  take one off (found items stay hidden)")
-        print("  /campkit list  -  show the flyout items")
-        print("  /campkit scan  -  look through your bags again")
-        print("  /campkit defaults  -  unhide found items and clear your additions")
-        print("  /campkit grow up/down/left/right/round")
-        print("  /campkit size <number>  -  button size")
-        print("  /campkit combat  -  toggle hiding the button in combat")
-        print("  /campkit lock  -  toggle locking the button in place")
-        print("  /campkit glow  -  toggle the glow when you're near a fire")
-        print("  /campkit reset  -  recenter the button")
-        print("  /campkit bags  -  list your bag items with IDs")
-        print("  /campkit buffs  -  list your buffs with IDs (to find the fire aura)")
+        print("|cff33ff99CampKit|r " .. L["commands:"])
+        for _, line in ipairs({
+            { "/campkit", "open the settings page" },
+            { "/campkit add <shift-click item>", "add any item to the flyout" },
+            { "/campkit remove <item or number>", "take one off (found items stay hidden)" },
+            { "/campkit list", "show the flyout items" },
+            { "/campkit scan", "look through your bags again" },
+            { "/campkit defaults", "unhide found items and clear your additions" },
+            { "/campkit grow up/down/left/right/round", "which way the flyout opens" },
+            { "/campkit size <number>", "button size" },
+            { "/campkit combat", "toggle hiding the button in combat" },
+            { "/campkit lock", "toggle locking the button in place" },
+            { "/campkit glow", "toggle the glow when you're near a fire" },
+            { "/campkit reset", "recenter the button" },
+            { "/campkit bags", "list your bag items with IDs" },
+            { "/campkit buffs", "list your buffs with IDs (to find the fire aura)" },
+        }) do
+            print("  " .. line[1] .. "  -  " .. L[line[2]])
+        end
     end
 end

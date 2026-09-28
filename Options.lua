@@ -3,13 +3,15 @@
 
 local addonName, ns = ...
 ns = ns or {}
+local L = ns.L or setmetatable({}, { __index = function(_, key) return key end })
 
 local ROW_HEIGHT = 28
 local MAX_ROWS = 10
 local PICK_SIZE, PICK_GAP, PICK_COLUMNS, PICK_ROWS = 32, 6, 7, 6
+local PICK_TOP = -32   -- room for a two-line hint above the grid
 local LEFT, RIGHT = 16, 340
 local DIRECTIONS = { "UP", "DOWN", "LEFT", "RIGHT", "ROUND" }
-local DIRECTION_LABELS = { UP = "Up", DOWN = "Down", LEFT = "Left", RIGHT = "Right", ROUND = "Round" }
+local DIRECTION_LABELS = { UP = L["Up"], DOWN = L["Down"], LEFT = L["Left"], RIGHT = L["Right"], ROUND = L["Round"] }
 
 local panel = CreateFrame("Frame")
 panel.name = "CampKit"
@@ -34,6 +36,8 @@ local function Button(parent, text, width, x, y, onClick)
     b:SetSize(width, 22)
     b:SetPoint("TOPLEFT", x, y)
     b:SetText(text)
+    local fs = b:GetFontString()
+    if fs then b:SetWidth(math.max(width, fs:GetStringWidth() + 24)) end
     b:SetScript("OnClick", onClick)
     return b
 end
@@ -52,7 +56,7 @@ end
 -- Label, then [-] value [+], stepping by the setting's own step.
 local function Stepper(parent, label, key, x, y, action)
     local step = ns.LIMITS[key][3]
-    Text(parent, "GameFontHighlight", label, x, y - 4)
+    Text(parent, "GameFontHighlight", label, x, y - 4):SetWidth(156)
     local value = parent:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
     value:SetPoint("TOPLEFT", x + 190, y - 4)
     value:SetWidth(30)
@@ -63,7 +67,7 @@ local function Stepper(parent, label, key, x, y, action)
 end
 
 StaticPopupDialogs["CAMPKIT_RESTORE_DEFAULTS"] = {
-    text = "Show every camp item CampKit found again, and remove the items you added?",
+    text = L["Show every camp item CampKit found again, and remove the items you added?"],
     button1 = YES or "Yes",
     button2 = NO or "No",
     OnAccept = function() Do(ns.actions.RestoreDefaults()) end,
@@ -101,7 +105,7 @@ local function ItemRow(parent, i)
     row.remove = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
     row.remove:SetSize(70, 20)
     row.remove:SetPoint("RIGHT")
-    row.remove:SetText("Remove")
+    row.remove:SetText(L["Remove"])
     row.remove:SetScript("OnClick", function() Do(ns.actions.RemoveItem(row.itemID)) end)
     return row
 end
@@ -110,9 +114,10 @@ local function Build()
     local p = panel
     local version = (C_AddOns and C_AddOns.GetAddOnMetadata or GetAddOnMetadata)(addonName, "Version")
     Text(p, "GameFontNormalLarge", "CampKit", LEFT, -16)
-    Text(p, "GameFontDisableSmall", "Version " .. (version or "?") .. "  ·  Right-drag the campfire to move it", LEFT, -40)
+    Text(p, "GameFontDisableSmall", L["Version %s"]:format(version or "?") .. "  ·  "
+        .. L["Right-drag the campfire to move it"], LEFT, -40)
 
-    widgets.notReady = Text(p, "GameFontHighlight", "CampKit finishes loading after combat.", LEFT, -72)
+    widgets.notReady = Text(p, "GameFontHighlight", L["CampKit finishes loading after combat."], LEFT, -72)
 
     -- Everything below shows only once CampKit has loaded.
     p = CreateFrame("Frame", nil, panel)
@@ -120,27 +125,27 @@ local function Build()
     widgets.content = p
 
     -- Left column: how the button looks and behaves.
-    Text(p, "GameFontNormal", "Flyout Direction", LEFT, -72)
+    Text(p, "GameFontNormal", L["Flyout Direction"], LEFT, -72)
     widgets.directions = {}
     for i, dir in ipairs(DIRECTIONS) do
         widgets.directions[dir] = Button(p, DIRECTION_LABELS[dir], 58, LEFT + (i - 1) * 60, -94,
             function() Do(ns.actions.SetDirection(dir)) end)
     end
 
-    Text(p, "GameFontNormal", "Campfire Button", LEFT, -134)
-    widgets.hideInCombat = Checkbox(p, "Hide in Combat", LEFT - 4, -152,
+    Text(p, "GameFontNormal", L["Campfire Button"], LEFT, -134)
+    widgets.hideInCombat = Checkbox(p, L["Hide in Combat"], LEFT - 4, -152,
         function(on) Do(ns.actions.SetHideInCombat(on)) end)
-    widgets.locked = Checkbox(p, "Lock Position", LEFT - 4, -180,
+    widgets.locked = Checkbox(p, L["Lock Position"], LEFT - 4, -180,
         function(on) Do(ns.actions.SetLocked(on)) end)
-    widgets.fireGlow = Checkbox(p, "Glow Near a Fire", LEFT - 4, -208,
+    widgets.fireGlow = Checkbox(p, L["Glow Near a Fire"], LEFT - 4, -208,
         function(on) Do(ns.actions.SetFireGlow(on)) end)
-    widgets.buttonSize = Stepper(p, "Button Size", "buttonSize", LEFT, -244, ns.actions.SetButtonSize)
-    widgets.cooldownFontSize = Stepper(p, "Cooldown Number Size", "cooldownFontSize", LEFT, -272,
+    widgets.buttonSize = Stepper(p, L["Button Size"], "buttonSize", LEFT, -244, ns.actions.SetButtonSize)
+    widgets.cooldownFontSize = Stepper(p, L["Cooldown Number Size"], "cooldownFontSize", LEFT, -272,
         ns.actions.SetCooldownFontSize)
-    Button(p, "Reset Position", 120, LEFT, -312, function() Do(ns.actions.ResetPosition()) end)
+    Button(p, L["Reset Position"], 120, LEFT, -312, function() Do(ns.actions.ResetPosition()) end)
 
     -- Right column: what's on the flyout.
-    Text(p, "GameFontNormal", "Flyout Items", RIGHT, -72)
+    Text(p, "GameFontNormal", L["Flyout Items"], RIGHT, -72)
     widgets.list = CreateFrame("Frame", nil, p)
     widgets.list:SetPoint("TOPLEFT", RIGHT, -94)
     widgets.list:SetSize(280, ROW_HEIGHT)
@@ -149,19 +154,21 @@ local function Build()
 
     widgets.empty = widgets.list:CreateFontString(nil, "ARTWORK", "GameFontDisable")
     widgets.empty:SetPoint("TOPLEFT", 0, -6)
-    widgets.empty:SetText("No camp items found yet.")
+    widgets.empty:SetText(L["No camp items found yet."])
 
     local footer = CreateFrame("Frame", nil, p)
     footer:SetSize(280, 120)
     footer:SetPoint("TOPLEFT", widgets.list, "BOTTOMLEFT", 0, -8)
     widgets.more = Text(footer, "GameFontDisableSmall", "", 0, 0)
 
-    Button(footer, "Add Item...", 110, 0, -18, function()
+    Button(footer, L["Add Item..."], 110, 0, -18, function()
         widgets.picking = true
         Refresh()
     end)
-    Button(footer, "Rescan Bags", 110, 0, -46, function() Do(ns.actions.Rescan()) end)
-    Button(footer, "Restore Defaults", 130, 116, -46, function() StaticPopup_Show("CAMPKIT_RESTORE_DEFAULTS") end)
+    local rescan = Button(footer, L["Rescan Bags"], 110, 0, -46, function() Do(ns.actions.Rescan()) end)
+    local restore = Button(footer, L["Restore Defaults"], 130, 0, 0, function() StaticPopup_Show("CAMPKIT_RESTORE_DEFAULTS") end)
+    restore:ClearAllPoints()
+    restore:SetPoint("LEFT", rescan, "RIGHT", 6, 0)
     widgets.footer = footer
 
     -- Add Item picker: replaces the list with the usable items in your bags. Bags can't be
@@ -171,16 +178,17 @@ local function Build()
     picker:SetSize(280, 300)
     picker:Hide()
     widgets.picker = picker
-    Text(picker, "GameFontHighlightSmall", "Click an item from your bags to add it to the flyout.", 0, 0)
-    widgets.pickEmpty = Text(picker, "GameFontDisable", "No usable items in your bags to add.", 0, -24)
+    local pickHint = Text(picker, "GameFontHighlightSmall", L["Click an item from your bags to add it to the flyout."], 0, 0)
+    pickHint:SetWidth(280)
+    widgets.pickEmpty = Text(picker, "GameFontDisable", L["No usable items in your bags to add."], 0, PICK_TOP - 4)
     widgets.pickMore = Text(picker, "GameFontDisableSmall", "", 0,
-        -20 - PICK_ROWS * (PICK_SIZE + PICK_GAP) - 4)
+        PICK_TOP - PICK_ROWS * (PICK_SIZE + PICK_GAP) - 4)
     widgets.picks = {}
     for i = 1, PICK_COLUMNS * PICK_ROWS do
         local b = CreateFrame("Button", nil, picker)
         b:SetSize(PICK_SIZE, PICK_SIZE)
         local col, row = (i - 1) % PICK_COLUMNS, math.floor((i - 1) / PICK_COLUMNS)
-        b:SetPoint("TOPLEFT", col * (PICK_SIZE + PICK_GAP), -20 - row * (PICK_SIZE + PICK_GAP))
+        b:SetPoint("TOPLEFT", col * (PICK_SIZE + PICK_GAP), PICK_TOP - row * (PICK_SIZE + PICK_GAP))
         b.icon = b:CreateTexture(nil, "ARTWORK")
         b.icon:SetAllPoints()
         b:SetHighlightTexture("Interface\\Buttons\\ButtonHilight-Square", "ADD")
@@ -197,7 +205,7 @@ local function Build()
         end)
         widgets.picks[i] = b
     end
-    Button(picker, CANCEL or "Cancel", 90, 0, -20 - PICK_ROWS * (PICK_SIZE + PICK_GAP) - 22, function()
+    Button(picker, CANCEL or "Cancel", 90, 0, PICK_TOP - PICK_ROWS * (PICK_SIZE + PICK_GAP) - 22, function()
         widgets.picking = false
         Refresh()
     end)
@@ -240,7 +248,7 @@ function Refresh()
         end
         widgets.pickEmpty:SetShown(#candidates == 0)
         local extra = #candidates - #widgets.picks
-        widgets.pickMore:SetText(extra > 0 and ("%d more: use /campkit add"):format(extra) or "")
+        widgets.pickMore:SetText(extra > 0 and L["%d more: use /campkit add"]:format(extra) or "")
         return
     end
 
@@ -251,7 +259,7 @@ function Refresh()
         if i <= shown then
             row.itemID = id
             row.icon:SetTexture(ns.ItemIcon(id))
-            row.name:SetText(ns.ItemName(id) .. (ns.IsFound(id) and "" or "  |cff999999(added)|r"))
+            row.name:SetText(ns.ItemName(id) .. (ns.IsFound(id) and "" or ("  |cff999999(" .. L["added"] .. ")|r")))
             row:Show()
         else
             row:Hide()
@@ -261,9 +269,9 @@ function Refresh()
     widgets.list:SetHeight(math.max(shown, 1) * ROW_HEIGHT)
 
     local notes = {}
-    if #items > MAX_ROWS then notes[#notes + 1] = ("%d more: /campkit list"):format(#items - MAX_ROWS) end
+    if #items > MAX_ROWS then notes[#notes + 1] = L["%d more: /campkit list"]:format(#items - MAX_ROWS) end
     local hidden = ns.HiddenCount()
-    if hidden > 0 then notes[#notes + 1] = ("%d removed (Restore Defaults brings them back)"):format(hidden) end
+    if hidden > 0 then notes[#notes + 1] = L["%d removed (Restore Defaults brings them back)"]:format(hidden) end
     widgets.more:SetText(table.concat(notes, "  ·  "))
 end
 
