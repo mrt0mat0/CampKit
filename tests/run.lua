@@ -75,6 +75,23 @@ check("global cooldown doesn't count", SC(100, 1.5, 100, 1.5), false)
 check("not on cooldown", SC(0, 0, 100, 300), false)
 check("no cooldown data", SC(nil, nil, 100, 300), false)
 
+-- Buffs are never read in combat: the game throws on "secret" aura data
+local inCombat = true
+InCombatLockdown = function() return inCombat end
+local auraReads = 0
+C_UnitAuras = { GetAuraDataByIndex = function()
+    auraReads = auraReads + 1
+    error("auras cannot be accessed when secret")
+end }
+check("no aura reads in combat", (pcall(ns.NearFire)) and auraReads, 0)
+inCombat = false
+check("a throwing aura API doesn't break out of combat", (pcall(ns.NearFire)), true)
+C_UnitAuras = { GetAuraDataByIndex = function(_, i)
+    if i == 1 then return { name = "Campfire Nearby", spellId = 1 } end
+end }
+check("fire found out of combat", ns.NearFire(), true)
+C_UnitAuras, InCombatLockdown = nil, nil
+
 -- Translations fall back to English
 check("missing translation shows English", ns.L["Remove"], "Remove")
 

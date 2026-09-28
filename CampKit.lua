@@ -276,6 +276,7 @@ local function CampCooldown()
 end
 
 local function LearnFromCooldowns()
+    if InCombatLockdown() then return end   -- cooldown times can be secret in combat
     local refStart, refDuration = CampCooldown()
     if not refStart then return end
     local found = false
@@ -387,11 +388,15 @@ end
 ns.IsFireAura = IsFireAura
 
 -- Walk the player's buffs, calling fn(name, spellID) for each.
+-- In combat the game marks aura data "secret", and an addon reading it throws an error
+-- (and taints the UI). So buffs are only read out of combat; pcall guards any other case.
 local function ForEachBuff(fn)
+    if InCombatLockdown() then return end
     for i = 1, 40 do
         local name, spellID
         if C_UnitAuras and C_UnitAuras.GetAuraDataByIndex then
-            local aura = C_UnitAuras.GetAuraDataByIndex("player", i, "HELPFUL")
+            local ok, aura = pcall(C_UnitAuras.GetAuraDataByIndex, "player", i, "HELPFUL")
+            if not ok then return end
             if aura then name, spellID = aura.name, aura.spellId end
         else
             local n, _, _, _, _, _, _, _, _, id = UnitBuff("player", i)
@@ -409,6 +414,7 @@ local function NearFire()
     end)
     return found
 end
+ns.NearFire = NearFire
 
 -- The proc glow (the animated border an ability gets when it lights up), shown while
 -- you're standing by a fire. Animated here rather than with the game's glow helpers,
@@ -459,15 +465,18 @@ local function HideProcGlow(b)
 end
 
 local function UpdateFireGlow()
-    if not main then return end
+    -- Buffs can't be read in combat; keep the glow as it was until combat ends.
+    if not main or InCombatLockdown() then return end
     local near = FireGlow() and NearFire()
     if near == main.nearFire then return end   -- don't restart the animation on every update
     main.nearFire = near
     if near then ShowProcGlow(main) else HideProcGlow(main) end
 end
 
+-- Cooldown times can be secret in combat too, so the buttons refresh when combat ends
+-- (PLAYER_REGEN_ENABLED) rather than doing math on values the addon may not read.
 local function UpdateAll()
-    if not initialized then return end
+    if not initialized or InCombatLockdown() then return end
     UpdateFireGlow()
     local bagCounts = CountBags()
     UpdateButton(main, bagCounts)
@@ -1145,6 +1154,8 @@ SlashCmdList.CAMPKIT = function(msg)
         Report(actions.SetLocked(not Locked()))
     elseif msg == "glow" then
         Report(actions.SetFireGlow(not FireGlow()))
+    elseif msg == "buffs" and InCombatLockdown() then
+        Say(L["can't change that in combat."])
     elseif msg == "buffs" then
         Say(L["your buffs (name = ID):"])
         ForEachBuff(function(name, spellID)
