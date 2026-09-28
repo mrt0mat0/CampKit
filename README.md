@@ -15,3 +15,7 @@ Copy the `CampKit` folder into `World of Warcraft/_retail_/Interface/AddOns/` (o
 ## Configuration
 
 Item IDs, button size, spacing, flyout direction, and hide delay are set at the top of `CampKit.lua`.
+
+## License
+
+MIT. See [LICENSE](LICENSE).
