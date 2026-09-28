@@ -38,6 +38,7 @@ local BUTTON_SIZE = 40
 local SPACING     = 4
 local DIRECTION   = "ROUND" -- which way the flyout opens: "UP", "DOWN", "LEFT", "RIGHT" or "ROUND"
 local HIDE_DELAY  = 0.3     -- seconds the flyout stays open after the mouse leaves
+local COOLDOWN_FONT_SIZE = 11   -- the countdown number in the middle of a button
 ---------------------------------------------------------------------------
 
 local QUESTION_MARK = 134400
@@ -306,6 +307,7 @@ local function UpdateButton(b, bagCounts)
 
     if start and duration then
         CooldownFrame_Set(b.cooldown, start, duration, enable)
+        ShrinkCountdown(b.cooldown)
     else
         b.cooldown:Clear()
     end
@@ -376,6 +378,28 @@ local function SetButtonAction(b, kind, value)
         b:SetAttribute("item", "item:" .. value)
     else
         b:SetAttribute(kind, value)
+    end
+end
+
+-- The default countdown number is large enough to hide the icon, so use a smaller one.
+local cooldownFont
+local function ShrinkCountdown(cooldown)
+    if cooldown.shrunk then return end
+    if not cooldownFont then
+        cooldownFont = CreateFont("CampKitCooldownFont")
+        cooldownFont:SetFont(STANDARD_TEXT_FONT, COOLDOWN_FONT_SIZE, "OUTLINE")
+    end
+    if cooldown.SetCountdownFont then
+        cooldown:SetCountdownFont("CampKitCooldownFont")
+        cooldown.shrunk = true
+        return
+    end
+    -- Older clients: the number is a font string inside the cooldown frame, made on first use.
+    for _, region in ipairs({ cooldown:GetRegions() }) do
+        if region.GetObjectType and region:GetObjectType() == "FontString" then
+            region:SetFontObject(cooldownFont)
+            cooldown.shrunk = true
+        end
     end
 end
 
