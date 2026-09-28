@@ -27,6 +27,13 @@ local KNOWN_CAMP_ITEMS = {
 -- Tooltip text that marks an item as a camp object (checked in lowercase).
 local CAMP_TEXT = { "requires a campfire nearby", "camping features share a cooldown" }
 
+-- The buff you get standing near a campfire: spell IDs, or names in lowercase.
+-- /campkit buffs lists your current buffs with their IDs if yours isn't here.
+local FIRE_AURAS = {
+    [7353] = true,          -- Cozy Fire
+    ["cozy fire"] = true,
+}
+
 local BUTTON_SIZE = 40
 local SPACING     = 4
 local DIRECTION   = "ROUND" -- which way the flyout opens: "UP", "DOWN", "LEFT", "RIGHT" or "ROUND"
@@ -56,6 +63,9 @@ local function GetSpellCD(spell)
     end
     if GetSpellCooldown then return GetSpellCooldown(spell) end
 end
+
+local _, ns = ...
+ns = ns or {}
 
 local main, flyout
 local RebuildFlyout, RequestRebuild
@@ -100,13 +110,14 @@ local function ForEachBagItem(fn)
     end
 end
 
--- Count an item by walking the bags ourselves, so nothing is missed.
-local function CountInBags(itemID)
-    local total = 0
+-- Count every item by walking the bags ourselves, so nothing is missed.
+-- One pass serves every button; walking the bags per button was slow on busy events.
+local function CountBags()
+    local counts = {}
     ForEachBagItem(function(id, _, _, stack)
-        if id == itemID then total = total + stack end
+        counts[id] = (counts[id] or 0) + stack
     end)
-    return total
+    return counts
 end
 
 local function ResolveItem(b)
@@ -265,13 +276,13 @@ local function CurrentItems()
     return list
 end
 
-local function UpdateButton(b)
+local function UpdateButton(b, bagCounts)
     local count, start, duration, enable
 
     if b.kind == "item" then
         ResolveItem(b)
         count = GetCount(b.itemID or b.value) or 0
-        if b.itemID then count = math.max(count, CountInBags(b.itemID)) end
+        if b.itemID then count = math.max(count, bagCounts[b.itemID] or 0) end
         if b.itemID then start, duration, enable = GetItemCD(b.itemID) end
         b.icon:SetTexture(b.iconTex or QUESTION_MARK)
         b.count:SetText(count)
@@ -300,10 +311,46 @@ local function UpdateButton(b)
     end
 end
 
+local function IsFireAura(name, spellID)
+    return (spellID and FIRE_AURAS[spellID]) or (name and FIRE_AURAS[name:lower()]) or false
+end
+ns.IsFireAura = IsFireAura
+
+-- Walk the player's buffs, calling fn(name, spellID) for each.
+local function ForEachBuff(fn)
+    for i = 1, 40 do
+        local name, spellID
+        if C_UnitAuras and C_UnitAuras.GetAuraDataByIndex then
+            local aura = C_UnitAuras.GetAuraDataByIndex("player", i, "HELPFUL")
+            if aura then name, spellID = aura.name, aura.spellId end
+        else
+            local n, _, _, _, _, _, _, _, _, id = UnitBuff("player", i)
+            name, spellID = n, id
+        end
+        if not name then return end
+        fn(name, spellID)
+    end
+end
+
+local function NearFire()
+    local found = false
+    ForEachBuff(function(name, spellID)
+        if IsFireAura(name, spellID) then found = true end
+    end)
+    return found
+end
+
+-- A steady warm ring on the campfire while you're standing by a fire.
+local function UpdateFireGlow()
+    if main and main.fireGlow then main.fireGlow:SetShown(NearFire()) end
+end
+
 local function UpdateAll()
     if not initialized then return end
-    UpdateButton(main)
-    for _, b in ipairs(flyButtons) do UpdateButton(b) end
+    UpdateFireGlow()
+    local bagCounts = CountBags()
+    UpdateButton(main, bagCounts)
+    for _, b in ipairs(flyButtons) do UpdateButton(b, bagCounts) end
 end
 
 local function ShowTooltip(b)
@@ -390,6 +437,26 @@ local function Direction()
     return (CampKitDB and CampKitDB.direction) or DIRECTION
 end
 
+local OPPOSITE = { UP = "DOWN", DOWN = "UP", LEFT = "RIGHT", RIGHT = "LEFT" }
+
+-- Open toward the other side when the chosen side doesn't have room and the other side has more.
+-- space: free pixels between the button and each screen edge; need: length of the flyout.
+local function ChooseDirection(dir, space, need)
+    local other = OPPOSITE[dir]
+    if not other or space[dir] >= need or space[other] <= space[dir] then return dir end
+    return other
+end
+ns.ChooseDirection = ChooseDirection
+
+local function ScreenSpace()
+    local top, bottom, left, right = main:GetTop(), main:GetBottom(), main:GetLeft(), main:GetRight()
+    if not (top and bottom and left and right) then return nil end
+    return {
+        UP = UIParent:GetTop() - top, DOWN = bottom,
+        LEFT = left, RIGHT = UIParent:GetRight() - right,
+    }
+end
+
 local function LayoutFlyout()
     local DIRECTION = Direction()
     local n = #flyButtons
@@ -413,6 +480,8 @@ local function LayoutFlyout()
         return
     end
     local long = n * BUTTON_SIZE + (n - 1) * SPACING
+    local space = ScreenSpace()
+    if space then DIRECTION = ChooseDirection(DIRECTION, space, long + SPACING) end
     local vertical = (DIRECTION == "UP" or DIRECTION == "DOWN")
 
     flyout:ClearAllPoints()
@@ -476,6 +545,7 @@ end
 local function ShowFlyout()
     if #flyButtons == 0 or InCombatLockdown() or main.dragging then return end
     UpdateAll()
+    LayoutFlyout()
     flyout.outside = 0
     flyout:Show()
 end
@@ -504,6 +574,15 @@ end
 local function SavePosition()
     local point, _, relPoint, x, y = main:GetPoint()
     CampKitDB.point, CampKitDB.relPoint, CampKitDB.x, CampKitDB.y = point, relPoint, x, y
+end
+
+local function ApplyCombatVisibility()
+    if CampKitDB.hideInCombat == false then
+        UnregisterStateDriver(main, "visibility")
+        main:Show()
+    else
+        RegisterStateDriver(main, "visibility", "[combat] hide; show")
+    end
 end
 
 local function RestorePosition()
@@ -544,6 +623,7 @@ local function Initialize()
     end)
     main:HookScript("OnEnter", ShowFlyout)
     RestorePosition()
+    ApplyCombatVisibility()
 
     -- A soft ember glow that breathes behind the campfire while you have kits.
     main.glow = main:CreateTexture(nil, "BACKGROUND", nil, -1)
@@ -561,8 +641,17 @@ local function Initialize()
     fade:SetSmoothing("IN_OUT")
     main.pulse = pulse
 
+    main.fireGlow = main:CreateTexture(nil, "OVERLAY", nil, 1)
+    main.fireGlow:SetTexture(CIRCLE)
+    main.fireGlow:SetBlendMode("ADD")
+    main.fireGlow:SetVertexColor(1, 0.55, 0.15, 0.45)
+    main.fireGlow:SetPoint("TOPLEFT", -2, 2)
+    main.fireGlow:SetPoint("BOTTOMRIGHT", 2, -2)
+    main.fireGlow:Hide()
+
     flyout = CreateFrame("Frame", "CampKitFlyout", main)
     flyout:Hide()
+    flyout:SetClampedToScreen(true)
     flyout:SetScript("OnUpdate", FlyoutOnUpdate)
 
     CampKitDB.items = nil   -- the old hand-made list; items are found automatically now
@@ -574,6 +663,12 @@ local function Initialize()
         CampKitCharDB.hinted = true
         print("|cff33ff99CampKit|r: open each of your profession windows once so CampKit can find your camp recipes.")
     end
+    -- Detection reads English tooltip text, so other clients only find the items listed by ID.
+    local locale = GetLocale and GetLocale()
+    if locale and locale ~= "enUS" and locale ~= "enGB" and not CampKitCharDB.localeHinted then
+        CampKitCharDB.localeHinted = true
+        print("|cff33ff99CampKit|r: on non-English clients some camp items aren't found automatically. Add them with /campkit add and shift-click the item.")
+    end
 end
 
 local events = CreateFrame("Frame")
@@ -584,6 +679,7 @@ events:RegisterEvent("BAG_UPDATE_DELAYED")
 events:RegisterEvent("BAG_UPDATE_COOLDOWN")
 events:RegisterEvent("SPELL_UPDATE_COOLDOWN")
 events:RegisterEvent("GET_ITEM_INFO_RECEIVED")
+events:RegisterEvent("UNIT_AURA")
 -- Profession window events differ between clients; register whichever exist.
 for _, e in ipairs({ "TRADE_SKILL_SHOW", "TRADE_SKILL_LIST_UPDATE", "TRADE_SKILL_UPDATE", "TRADE_SKILL_DATA_SOURCE_CHANGED" }) do
     pcall(events.RegisterEvent, events, e)
@@ -613,6 +709,8 @@ events:SetScript("OnEvent", function(_, event, arg1)
             if Learn(arg1) then RequestRebuild() end
         end
         UpdateAll()
+    elseif event == "UNIT_AURA" then
+        if arg1 == "player" then UpdateFireGlow() end
     elseif event == "PLAYER_REGEN_DISABLED" then
         -- Last moment before combat lockdown: close the flyout so it isn't stuck open.
         if flyout and flyout:IsShown() then flyout:Hide() end
@@ -737,6 +835,15 @@ SlashCmdList.CAMPKIT = function(msg)
                 print(("  %s = %d  (bag %d)"):format(name or "?", id, bag))
             end
         end)
+    elseif msg == "combat" then
+        CampKitDB.hideInCombat = CampKitDB.hideInCombat == false
+        ApplyCombatVisibility()
+        print("|cff33ff99CampKit|r: " .. (CampKitDB.hideInCombat and "hiding in combat." or "staying visible in combat."))
+    elseif msg == "buffs" then
+        print("|cff33ff99CampKit|r: your buffs (name = ID):")
+        ForEachBuff(function(name, spellID)
+            print(("  %s = %s%s"):format(name, tostring(spellID), IsFireAura(name, spellID) and "  (fire)" or ""))
+        end)
     elseif msg == "reset" then
         CampKitDB.point, CampKitDB.relPoint, CampKitDB.x, CampKitDB.y = nil, nil, nil, nil
         RestorePosition()
@@ -749,7 +856,9 @@ SlashCmdList.CAMPKIT = function(msg)
         print("  /campkit scan  -  look through your bags again")
         print("  /campkit defaults  -  unhide found items and clear your additions")
         print("  /campkit grow up/down/left/right/round")
+        print("  /campkit combat  -  toggle hiding the button in combat")
         print("  /campkit reset  -  recenter the button")
         print("  /campkit bags  -  list your bag items with IDs")
+        print("  /campkit buffs  -  list your buffs with IDs (to find the fire aura)")
     end
 end
