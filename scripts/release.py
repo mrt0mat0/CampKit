@@ -38,11 +38,23 @@ def fail(msg):
     sys.exit(f"release: {msg}")
 
 
-def run(*cmd, capture=False):
+def redact(text, secret):
+    return text.replace(secret, "<token>") if secret else text
+
+
+def run(*cmd, capture=False, secret=None):
+    """Run a command; on failure show its output, with `secret` (the API token) hidden."""
     result = subprocess.run(cmd, cwd=ROOT, text=True, capture_output=capture)
     if result.returncode != 0:
-        fail(f"`{' '.join(cmd)}` failed\n{result.stderr or ''}".rstrip())
+        detail = "\n".join(x for x in (result.stdout, result.stderr) if x)
+        fail(redact(f"`{' '.join(cmd)}` failed\n{detail}".rstrip(), secret))
     return result.stdout.strip() if capture else None
+
+
+def upload_form(metadata, zip_path):
+    """curl form fields for an upload. --form-string sends the metadata verbatim: with -F,
+    curl treats ';' in a value as the start of options and cuts the changelog off there."""
+    return ("--form-string", f"metadata={metadata}", "-F", f"file=@{zip_path}")
 
 
 def toc_field(text, name):
@@ -64,7 +76,7 @@ def token():
 
 def curseforge(path, tok, extra=()):
     out = run("curl", "-sS", "--fail-with-body", "-H", f"X-Api-Token: {tok}",
-              *extra, f"{CF_API}{path}", capture=True)
+              *extra, f"{CF_API}{path}", capture=True, secret=tok)
     return json.loads(out)
 
 
@@ -147,7 +159,7 @@ def main():
             "gameVersions": game_versions, "releaseType": args.type,
         })
         result = curseforge(f"/projects/{project}/upload-file", tok,
-                            ("-F", f"metadata={metadata}", "-F", f"file=@{zip_path}"))
+                            upload_form(metadata, zip_path))
         print(f"Uploaded to CurseForge (file id {result.get('id')})")
 
     TOC.write_text(new_toc)
