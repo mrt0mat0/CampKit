@@ -2,7 +2,7 @@
 ## Title: CampKit
 ## Notes: Click to set down your campfire. Hover for your other camp items and how many you're carrying.
 ## Author: CJ
-## Version: 1.2
+## Version: 1.2.1
 ## SavedVariables: CampKitDB
 ## SavedVariablesPerCharacter: CampKitCharDB
 ## X-Curse-Project-ID: 1716342
