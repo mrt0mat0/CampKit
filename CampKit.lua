@@ -34,11 +34,13 @@ local FIRE_AURAS = {
     ["cozy fire"] = true,
 }
 
+-- Defaults for settings players can change in game (Options > AddOns > CampKit, or /campkit).
 local BUTTON_SIZE = 40
-local SPACING     = 4
 local DIRECTION   = "ROUND" -- which way the flyout opens: "UP", "DOWN", "LEFT", "RIGHT" or "ROUND"
-local HIDE_DELAY  = 0.3     -- seconds the flyout stays open after the mouse leaves
 local COOLDOWN_FONT_SIZE = 11   -- the countdown number in the middle of a button
+
+local SPACING     = 4
+local HIDE_DELAY  = 0.3     -- seconds the flyout stays open after the mouse leaves
 ---------------------------------------------------------------------------
 
 local QUESTION_MARK = 134400
@@ -67,6 +69,33 @@ end
 
 local _, ns = ...
 ns = ns or {}
+local unpack = unpack or table.unpack
+
+-- Allowed ranges for the size settings: { min, max, step }.
+local LIMITS = {
+    buttonSize = { 24, 64, 4 },
+    cooldownFontSize = { 8, 20, 1 },
+}
+
+-- Round to the setting's step and keep it inside its range.
+local function ClampSetting(key, value)
+    local lo, hi, step = unpack(LIMITS[key])
+    value = lo + math.floor((value - lo) / step + 0.5) * step
+    return math.max(lo, math.min(hi, value))
+end
+ns.ClampSetting = ClampSetting
+ns.LIMITS = LIMITS
+
+local function Setting(key, default)
+    local v = CampKitDB and CampKitDB[key]
+    if v == nil then return default end
+    return v
+end
+
+local function ButtonSize() return Setting("buttonSize", BUTTON_SIZE) end
+local function CooldownFontSize() return Setting("cooldownFontSize", COOLDOWN_FONT_SIZE) end
+local function HideInCombat() return Setting("hideInCombat", true) end
+local function Locked() return Setting("locked", false) end
 
 local main, flyout
 local RebuildFlyout, RequestRebuild, ShrinkCountdown
@@ -366,7 +395,8 @@ local function ShowTooltip(b)
         GameTooltip:SetText(tostring(b.value))
     end
     if b == main then
-        GameTooltip:AddLine("Left-click: use    Right-drag: move", 0.6, 0.8, 1, true)
+        local hint = Locked() and "Left-click: use" or "Left-click: use    Right-drag: move"
+        GameTooltip:AddLine(hint, 0.6, 0.8, 1, true)
     end
     GameTooltip:Show()
 end
@@ -387,7 +417,7 @@ function ShrinkCountdown(cooldown)
     if cooldown.shrunk then return end
     if not cooldownFont then
         cooldownFont = CreateFont("CampKitCooldownFont")
-        cooldownFont:SetFont(STANDARD_TEXT_FONT, COOLDOWN_FONT_SIZE, "OUTLINE")
+        cooldownFont:SetFont(STANDARD_TEXT_FONT, CooldownFontSize(), "OUTLINE")
     end
     if cooldown.SetCountdownFont then
         cooldown:SetCountdownFont("CampKitCooldownFont")
@@ -405,7 +435,7 @@ end
 
 local function CreateButton(name, parent, kind, value)
     local b = CreateFrame("Button", name, parent, "SecureActionButtonTemplate")
-    b:SetSize(BUTTON_SIZE, BUTTON_SIZE)
+    b:SetSize(ButtonSize(), ButtonSize())
     b:RegisterForClicks("AnyUp", "AnyDown")
 
     b:SetAttribute("type", kind)
@@ -485,12 +515,13 @@ local function LayoutFlyout()
     local DIRECTION = Direction()
     local n = #flyButtons
     if n == 0 then return end
+    local size = ButtonSize()
 
     if DIRECTION == "ROUND" then
         -- Seat the items in a ring around the fire, starting at the top and going clockwise.
-        local step = BUTTON_SIZE + SPACING + 6
+        local step = size + SPACING + 6
         local radius = math.max(step, (n * step) / (2 * math.pi))
-        local span = 2 * (radius + BUTTON_SIZE / 2 + 4)
+        local span = 2 * (radius + size / 2 + 4)
 
         flyout:ClearAllPoints()
         flyout:SetSize(span, span)
@@ -503,13 +534,13 @@ local function LayoutFlyout()
         end
         return
     end
-    local long = n * BUTTON_SIZE + (n - 1) * SPACING
+    local long = n * size + (n - 1) * SPACING
     local space = ScreenSpace()
     if space then DIRECTION = ChooseDirection(DIRECTION, space, long + SPACING) end
     local vertical = (DIRECTION == "UP" or DIRECTION == "DOWN")
 
     flyout:ClearAllPoints()
-    if vertical then flyout:SetSize(BUTTON_SIZE, long) else flyout:SetSize(long, BUTTON_SIZE) end
+    if vertical then flyout:SetSize(size, long) else flyout:SetSize(long, size) end
 
     if DIRECTION == "UP" then
         flyout:SetPoint("BOTTOM", main, "TOP", 0, SPACING)
@@ -522,7 +553,7 @@ local function LayoutFlyout()
     end
 
     for i, b in ipairs(flyButtons) do
-        local offset = (i - 1) * (BUTTON_SIZE + SPACING)
+        local offset = (i - 1) * (size + SPACING)
         b:ClearAllPoints()
         if DIRECTION == "UP" then
             b:SetPoint("BOTTOM", flyout, "BOTTOM", 0, offset)
@@ -560,6 +591,7 @@ function RebuildFlyout()
     for i = #items + 1, #flyPool do flyPool[i]:Hide() end
     LayoutFlyout()
     UpdateAll()
+    if ns.OnChanged then ns.OnChanged() end
 end
 
 function RequestRebuild()
@@ -601,12 +633,24 @@ local function SavePosition()
 end
 
 local function ApplyCombatVisibility()
-    if CampKitDB.hideInCombat == false then
+    if not HideInCombat() then
         UnregisterStateDriver(main, "visibility")
         main:Show()
     else
         RegisterStateDriver(main, "visibility", "[combat] hide; show")
     end
+end
+
+local function ApplySize()
+    local size = ButtonSize()
+    main:SetSize(size, size)
+    main.glow:SetSize(size * 1.9, size * 1.9)
+    for _, b in ipairs(flyPool) do b:SetSize(size, size) end
+    LayoutFlyout()
+end
+
+local function ApplyCooldownFont()
+    if cooldownFont then cooldownFont:SetFont(STANDARD_TEXT_FONT, CooldownFontSize(), "OUTLINE") end
 end
 
 local function RestorePosition()
@@ -634,7 +678,7 @@ local function Initialize()
     main:SetClampedToScreen(true)
     main:RegisterForDrag("RightButton")
     main:SetScript("OnDragStart", function(self)
-        if InCombatLockdown() then return end
+        if InCombatLockdown() or Locked() then return end
         self.dragging = true
         if flyout:IsShown() then flyout:Hide() end
         GameTooltip:Hide()
@@ -655,7 +699,7 @@ local function Initialize()
     main.glow:SetBlendMode("ADD")
     main.glow:SetVertexColor(1, 0.5, 0.1)
     main.glow:SetPoint("CENTER")
-    main.glow:SetSize(BUTTON_SIZE * 1.9, BUTTON_SIZE * 1.9)
+    main.glow:SetSize(ButtonSize() * 1.9, ButtonSize() * 1.9)
     local pulse = main.glow:CreateAnimationGroup()
     pulse:SetLooping("BOUNCE")
     local fade = pulse:CreateAnimation("Alpha")
@@ -733,6 +777,7 @@ events:SetScript("OnEvent", function(_, event, arg1)
             if Learn(arg1) then RequestRebuild() end
         end
         UpdateAll()
+        if ns.OnChanged then ns.OnChanged() end
     elseif event == "UNIT_AURA" then
         if arg1 == "player" then UpdateFireGlow() end
     elseif event == "PLAYER_REGEN_DISABLED" then
@@ -772,86 +817,208 @@ local function IndexOf(list, id)
     end
 end
 
+local function Say(text)
+    print("|cff33ff99CampKit|r: " .. text)
+end
+
+---------------------------------------------------------------------------
+-- Changes: shared by the slash commands and the settings page.
+-- Each returns ok, message. Secure buttons can't be changed in combat, so each refuses then.
+---------------------------------------------------------------------------
+local actions = {}
+ns.actions = actions
+
+local function CanChange()
+    if not initialized then return false, "not ready yet (it finishes loading after combat)." end
+    if InCombatLockdown() then return false, "can't change that in combat." end
+    return true
+end
+
+local function Changed(ok, message)
+    if ok and ns.OnChanged then ns.OnChanged() end
+    return ok, message
+end
+
+function actions.SetDirection(dir)
+    local ok, why = CanChange()
+    if not ok then return false, why end
+    CampKitDB.direction = dir
+    if flyout:IsShown() then flyout:Hide() end
+    LayoutFlyout()
+    if dir == "ROUND" then return Changed(true, "your camp items now circle the campfire.") end
+    return Changed(true, "flyout now opens " .. dir:lower() .. ".")
+end
+
+function actions.SetHideInCombat(on)
+    local ok, why = CanChange()
+    if not ok then return false, why end
+    CampKitDB.hideInCombat = on
+    ApplyCombatVisibility()
+    return Changed(true, on and "hiding in combat." or "staying visible in combat.")
+end
+
+function actions.SetLocked(on)
+    local ok, why = CanChange()
+    if not ok then return false, why end
+    CampKitDB.locked = on
+    return Changed(true, on and "button locked in place." or "button unlocked; right-drag to move it.")
+end
+
+function actions.SetButtonSize(size)
+    local ok, why = CanChange()
+    if not ok then return false, why end
+    CampKitDB.buttonSize = ClampSetting("buttonSize", size)
+    ApplySize()
+    return Changed(true, "button size " .. CampKitDB.buttonSize .. ".")
+end
+
+function actions.SetCooldownFontSize(size)
+    local ok, why = CanChange()
+    if not ok then return false, why end
+    CampKitDB.cooldownFontSize = ClampSetting("cooldownFontSize", size)
+    ApplyCooldownFont()
+    return Changed(true, "cooldown number size " .. CampKitDB.cooldownFontSize .. ".")
+end
+
+function actions.AddItem(id)
+    local ok, why = CanChange()
+    if not ok then return false, why end
+    if CampKitCharDB.hidden[id] then
+        CampKitCharDB.hidden[id] = nil
+    elseif IndexOf(CurrentItems(), id) then
+        return false, ItemName(id) .. " is already on the flyout."
+    else
+        table.insert(CampKitCharDB.extra, id)
+    end
+    RebuildFlyout()
+    return Changed(true, "added " .. ItemName(id) .. ".")
+end
+
+function actions.RemoveItem(id)
+    local ok, why = CanChange()
+    if not ok then return false, why end
+    if not IndexOf(CurrentItems(), id) then
+        return false, "that item isn't on the flyout. /campkit list shows what is."
+    end
+    local extraIndex = IndexOf(CampKitCharDB.extra, id)
+    if extraIndex then table.remove(CampKitCharDB.extra, extraIndex) end
+    if CampKitCharDB.learned[id] then CampKitCharDB.hidden[id] = true end
+    RebuildFlyout()
+    return Changed(true, "removed " .. ItemName(id) .. ".")
+end
+
+function actions.Rescan()
+    local ok, why = CanChange()
+    if not ok then return false, why end
+    wipe(checked)
+    LearnFromBags()
+    RebuildFlyout()
+    return Changed(true, "bags scanned. Open a profession window to pick up its camp recipes.")
+end
+
+function actions.RestoreDefaults()
+    local ok, why = CanChange()
+    if not ok then return false, why end
+    wipe(CampKitCharDB.hidden)
+    wipe(CampKitCharDB.extra)
+    RebuildFlyout()
+    return Changed(true, "showing every camp item found, and removed your own additions.")
+end
+
+function actions.ResetPosition()
+    local ok, why = CanChange()
+    if not ok then return false, why end
+    CampKitDB.point, CampKitDB.relPoint, CampKitDB.x, CampKitDB.y = nil, nil, nil, nil
+    RestorePosition()
+    return Changed(true, "position reset.")
+end
+
+-- Read-only views for the settings page.
+ns.IsReady = function() return initialized end
+ns.CurrentItems = CurrentItems
+ns.ItemName = ItemName
+ns.ItemIcon = function(id) return select(5, GetInfoInstant(id)) or QUESTION_MARK end
+ns.IsFound = function(id) return CampKitCharDB.learned[id] and true or false end
+ns.HiddenCount = function()
+    local n = 0
+    for _ in pairs(CampKitCharDB.hidden) do n = n + 1 end
+    return n
+end
+ns.Get = {
+    direction = Direction, hideInCombat = HideInCombat, locked = Locked,
+    buttonSize = ButtonSize, cooldownFontSize = CooldownFontSize,
+}
+
+---------------------------------------------------------------------------
+-- Slash commands
+---------------------------------------------------------------------------
+local function Report(ok, message)
+    if message then Say(message) end
+end
+
 SLASH_CAMPKIT1 = "/campkit"
 SlashCmdList.CAMPKIT = function(msg)
     local raw = (msg or ""):match("^%s*(.-)%s*$")
     msg = raw:lower()
     local rawArg = raw:match("^%S*%s*(.-)$")
-    if not initialized then
-        print("|cff33ff99CampKit|r: not ready yet (it finishes loading after combat).")
-        return
-    end
-    if InCombatLockdown() then
-        print("|cff33ff99CampKit|r: can't change that in combat.")
-        return
-    end
     local cmd, arg = msg:match("^(%S*)%s*(.-)$")
-    if cmd == "grow" then
+    if not initialized then
+        Say("not ready yet (it finishes loading after combat).")
+    elseif msg == "" or msg == "options" or msg == "settings" then
+        if InCombatLockdown() then
+            Say("settings open after combat.")
+        elseif ns.OpenOptions then
+            ns.OpenOptions()
+        else
+            Say("this client has no addon settings page. /campkit help lists the commands.")
+        end
+    elseif cmd == "grow" then
         local dir = VALID_DIRECTIONS[arg]
         if not dir then
-            print("|cff33ff99CampKit|r: use /campkit grow up, down, left, right or round.")
+            Say("use /campkit grow up, down, left, right or round.")
             return
         end
-        CampKitDB.direction = dir
-        if flyout:IsShown() then flyout:Hide() end
-        LayoutFlyout()
-        if dir == "ROUND" then
-            print("|cff33ff99CampKit|r: your camp items now circle the campfire.")
-        else
-            print("|cff33ff99CampKit|r: flyout now opens " .. arg .. ".")
-        end
+        Report(actions.SetDirection(dir))
     elseif cmd == "add" then
         local id = rawArg ~= "" and ParseItem(rawArg)
         if not id then
-            print("|cff33ff99CampKit|r: type /campkit add, then shift-click the item from your bags (or give its ID).")
+            Say("type /campkit add, then shift-click the item from your bags (or give its ID).")
             return
         end
-        if CampKitCharDB.hidden[id] then
-            CampKitCharDB.hidden[id] = nil
-        elseif IndexOf(CurrentItems(), id) then
-            print("|cff33ff99CampKit|r: " .. ItemName(id) .. " is already on the flyout.")
-            return
-        else
-            table.insert(CampKitCharDB.extra, id)
-        end
-        RebuildFlyout()
-        print("|cff33ff99CampKit|r: added " .. ItemName(id) .. ".")
+        Report(actions.AddItem(id))
     elseif cmd == "remove" then
         local items = CurrentItems()
         local n = tonumber(rawArg)
         local id = (n and n >= 1 and n <= #items) and items[n] or (rawArg ~= "" and ParseItem(rawArg))
-        if not id or not IndexOf(items, id) then
-            print("|cff33ff99CampKit|r: that item isn't on the flyout. /campkit list shows what is.")
+        if not id then
+            Say("that item isn't on the flyout. /campkit list shows what is.")
             return
         end
-        local extraIndex = IndexOf(CampKitCharDB.extra, id)
-        if extraIndex then table.remove(CampKitCharDB.extra, extraIndex) end
-        if CampKitCharDB.learned[id] then CampKitCharDB.hidden[id] = true end
-        RebuildFlyout()
-        print("|cff33ff99CampKit|r: removed " .. ItemName(id) .. ".")
+        Report(actions.RemoveItem(id))
+    elseif cmd == "size" then
+        local n = tonumber(arg)
+        if not n then
+            local lo, hi = unpack(LIMITS.buttonSize)
+            Say(("use /campkit size <%d-%d>. It's %d now."):format(lo, hi, ButtonSize()))
+            return
+        end
+        Report(actions.SetButtonSize(n))
     elseif msg == "list" then
-        print("|cff33ff99CampKit|r: flyout items, in order:")
+        Say("flyout items, in order:")
         for i, id in ipairs(CurrentItems()) do
             local source = CampKitCharDB.learned[id] and "found" or "added"
             print(("  %d. %s (%d, %s)"):format(i, ItemName(id), id, source))
         end
-        local hiddenCount = 0
-        for _ in pairs(CampKitCharDB.hidden) do hiddenCount = hiddenCount + 1 end
+        local hiddenCount = ns.HiddenCount()
         if hiddenCount > 0 then
             print(("  %d hidden. /campkit defaults brings them back."):format(hiddenCount))
         end
     elseif msg == "scan" then
-        wipe(checked)
-        LearnFromBags()
-        RebuildFlyout()
-        print("|cff33ff99CampKit|r: bags scanned. Open a profession window to pick up its camp recipes.")
+        Report(actions.Rescan())
     elseif msg == "defaults" then
-        wipe(CampKitCharDB.hidden)
-        wipe(CampKitCharDB.extra)
-        RebuildFlyout()
-        print("|cff33ff99CampKit|r: showing every camp item found, and removed your own additions.")
+        Report(actions.RestoreDefaults())
     elseif msg == "bags" then
-        print("|cff33ff99CampKit|r: items in your bags (name = ID):")
+        Say("items in your bags (name = ID):")
         local seen = {}
         ForEachBagItem(function(id, name, _, _, bag)
             if not seen[id] then
@@ -860,27 +1027,28 @@ SlashCmdList.CAMPKIT = function(msg)
             end
         end)
     elseif msg == "combat" then
-        CampKitDB.hideInCombat = CampKitDB.hideInCombat == false
-        ApplyCombatVisibility()
-        print("|cff33ff99CampKit|r: " .. (CampKitDB.hideInCombat and "hiding in combat." or "staying visible in combat."))
+        Report(actions.SetHideInCombat(not HideInCombat()))
+    elseif msg == "lock" then
+        Report(actions.SetLocked(not Locked()))
     elseif msg == "buffs" then
-        print("|cff33ff99CampKit|r: your buffs (name = ID):")
+        Say("your buffs (name = ID):")
         ForEachBuff(function(name, spellID)
             print(("  %s = %s%s"):format(name, tostring(spellID), IsFireAura(name, spellID) and "  (fire)" or ""))
         end)
     elseif msg == "reset" then
-        CampKitDB.point, CampKitDB.relPoint, CampKitDB.x, CampKitDB.y = nil, nil, nil, nil
-        RestorePosition()
-        print("|cff33ff99CampKit|r: position reset.")
+        Report(actions.ResetPosition())
     else
         print("|cff33ff99CampKit|r commands:")
+        print("  /campkit  -  open the settings page")
         print("  /campkit add <shift-click item>  -  add any item to the flyout")
         print("  /campkit remove <item or number>  -  take one off (found items stay hidden)")
         print("  /campkit list  -  show the flyout items")
         print("  /campkit scan  -  look through your bags again")
         print("  /campkit defaults  -  unhide found items and clear your additions")
         print("  /campkit grow up/down/left/right/round")
+        print("  /campkit size <number>  -  button size")
         print("  /campkit combat  -  toggle hiding the button in combat")
+        print("  /campkit lock  -  toggle locking the button in place")
         print("  /campkit reset  -  recenter the button")
         print("  /campkit bags  -  list your bag items with IDs")
         print("  /campkit buffs  -  list your buffs with IDs (to find the fire aura)")
